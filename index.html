@@ -831,6 +831,54 @@
     </table>
   </div>
 
+  <!-- 管理員修改訂單彈出視窗 -->
+<div id="editOrderModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center; padding:16px;">
+  <div style="background:#fff; width:100%; max-width:520px; border-radius:12px; padding:20px; max-height:90vh; overflow-y:auto; box-shadow:0 10px 25px rgba(0,0,0,0.2);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
+      <h3 style="margin:0; font-size:1.1rem;">✏️ 修改訂單（<span id="editOrderNoLabel"></span>）</h3>
+      <button type="button" onclick="closeEditOrderModal()" style="background:none; border:none; font-size:1.3rem; cursor:pointer;">✕</button>
+    </div>
+
+    <div style="display:grid; gap:10px; margin-bottom:14px;">
+      <div>
+        <label style="font-size:0.85rem; font-weight:700;">訂購人姓名</label>
+        <input id="editOrderName" type="text" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <div>
+          <label style="font-size:0.85rem; font-weight:700;">手機號碼</label>
+          <input id="editOrderPhone" type="text" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:0.85rem; font-weight:700;">IG 帳號</label>
+          <input id="editOrderSocial" type="text" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
+        </div>
+      </div>
+      <div>
+        <label style="font-size:0.85rem; font-weight:700;">訂單備註</label>
+        <input id="editOrderNote" type="text" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
+      </div>
+    </div>
+
+    <div style="margin-bottom:10px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <label style="font-size:0.85rem; font-weight:700;">訂購明細（款式 / 尺寸 / 數量）</label>
+        <button type="button" onclick="addEditOrderItemRow()" style="background:#0f172a; color:#fff; border:none; border-radius:6px; padding:4px 10px; font-size:0.8rem; cursor:pointer;">+ 新增品項</button>
+      </div>
+      <div id="editOrderItemsContainer" style="display:grid; gap:8px;"></div>
+    </div>
+
+    <div id="editOrderTotalPreview" style="background:#f8fafc; padding:10px 12px; border-radius:8px; font-size:0.9rem; font-weight:700; margin-bottom:14px; text-align:right;">
+      共 0 件 ｜ 總金額：NT$ 0
+    </div>
+
+    <div style="display:flex; gap:10px; justify-content:flex-end;">
+      <button type="button" onclick="closeEditOrderModal()" style="padding:8px 16px; border:1px solid #cbd5e1; background:#fff; border-radius:6px; cursor:pointer;">取消</button>
+      <button type="button" id="btnSaveEditOrder" onclick="submitEditOrder()" style="padding:8px 18px; border:none; background:#16a34a; color:#fff; font-weight:700; border-radius:6px; cursor:pointer;">💾 儲存修改</button>
+    </div>
+  </div>
+</div>
+
   <script>
     // 已綁定你的 Google Apps Script 後端連線網址
     const API_URL = "https://script.google.com/macros/s/AKfycbwCPkkYrTd2FBNh0SMvn7HEcq_DcgsayyO1lvFjmXmKV6UexbexskppXCpovvglSQ3vAA/exec";
@@ -1232,8 +1280,10 @@
             </div>
             <div style="display:flex; align-items:center; gap:10px;">
               <span class="badge-status ${isPicked ? 'picked' : ''}">${o.status}</span>
-              ${!isPicked ? `<button type="button" class="btn-pickup" onclick="confirmPickup('${o.orderNo}', '${o.name}')">✓ 確認已領取</button>` : ''}
-            </div>
+              ${!isPicked ? `
+              <button type="button" class="btn-pickup" style="background:#334155;" onclick="openEditOrderModal('${o.orderNo}')">✏️ 修改訂單</button>
+              <button type="button" class="btn-pickup" onclick="confirmPickup('${o.orderNo}', '${o.name}')">✓ 確認已領取</button>` : ''}
+              </div>
           </div>
         `;
       }).join("");
@@ -1253,6 +1303,148 @@
         alert("核銷失敗：" + err.message);
       }
     }
+
+    let editingOrderNo = "";
+
+    function openEditOrderModal(orderNo) {
+      const order = adminCache.orders.find(o => o.orderNo === orderNo);
+      if (!order) return alert("找不到該筆訂單資料");
+    
+      editingOrderNo = orderNo;
+      document.getElementById("editOrderNoLabel").textContent = orderNo;
+      document.getElementById("editOrderName").value = order.name || "";
+      document.getElementById("editOrderPhone").value = order.phone || "";
+      document.getElementById("editOrderSocial").value = order.social || "";
+      document.getElementById("editOrderNote").value = order.note || "";
+    
+      const container = document.getElementById("editOrderItemsContainer");
+      container.innerHTML = "";
+    
+      // 解析原本的明細字串，例如 "A款 (150) × 1, B款 (M) × 2"
+      const parts = (order.summary || "").split(",").map(s => s.trim()).filter(Boolean);
+      if (parts.length > 0) {
+        parts.forEach(part => {
+          const m = part.match(/^(.+?)\s*\((.+?)\)\s*[×xX*]\s*(\d+)$/);
+          if (m) {
+            addEditOrderItemRow(m[1].trim(), m[2].trim(), Number(m[3]));
+          } else {
+            addEditOrderItemRow("", "", 1);
+          }
+        });
+      } else {
+        addEditOrderItemRow("", "", 1);
+      }
+    
+      recalcEditOrderTotal();
+      document.getElementById("editOrderModal").style.display = "flex";
+    }
+
+    function closeEditOrderModal() {
+      document.getElementById("editOrderModal").style.display = "none";
+      editingOrderNo = "";
+    }
+
+    function addEditOrderItemRow(selectedTitle = "", selectedSize = "", qty = 1) {
+      const container = document.getElementById("editOrderItemsContainer");
+      const invList = (adminCache.inventory && adminCache.inventory.length > 0) ? adminCache.inventory : productList;
+    
+      const optionsHtml = invList.map(item => {
+        const label = `${item.title} (${item.size})`;
+        const isMatch = (item.title === selectedTitle && String(item.size) === String(selectedSize));
+        return `<option value="${item.sku}" data-title="${item.title}" data-size="${item.size}" ${isMatch ? "selected" : ""}>${label}</option>`;
+      }).join("");
+    
+      const row = document.createElement("div");
+      row.className = "edit-order-item-row";
+      row.style.cssText = "display:flex; gap:8px; align-items:center;";
+      row.innerHTML = `
+        <select onchange="recalcEditOrderTotal()" style="flex:1; padding:7px; border:1px solid #cbd5e1; border-radius:6px;">
+          ${optionsHtml}
+        </select>
+        <input type="number" min="1" value="${qty}" oninput="recalcEditOrderTotal()" style="width:65px; padding:7px; border:1px solid #cbd5e1; border-radius:6px; text-align:center;">
+        <button type="button" onclick="this.parentElement.remove(); recalcEditOrderTotal();" style="background:#ef4444; color:#fff; border:none; border-radius:6px; padding:6px 10px; cursor:pointer;">刪除</button>
+      `;
+      container.appendChild(row);
+      recalcEditOrderTotal();
+    }
+
+    function recalcEditOrderTotal() {
+      const rows = document.querySelectorAll(".edit-order-item-row");
+      let totalQty = 0;
+      rows.forEach(r => {
+        const q = Number(r.querySelector("input").value) || 0;
+        if (q > 0) totalQty += q;
+      });
+      const pricing = calculateTierPricing(totalQty);
+      document.getElementById("editOrderTotalPreview").textContent =
+        `共 ${totalQty} 件 ｜ 總金額：NT$ ${pricing.final.toLocaleString()}`;
+    }
+
+    async function submitEditOrder() {
+      const name = document.getElementById("editOrderName").value.trim();
+      const phone = document.getElementById("editOrderPhone").value.trim();
+      const social = document.getElementById("editOrderSocial").value.trim();
+      const note = document.getElementById("editOrderNote").value.trim();
+    
+      if (!name || !phone) return alert("訂購人姓名與手機號碼不可為空");
+    
+      const rows = document.querySelectorAll(".edit-order-item-row");
+      const items = [];
+      rows.forEach(r => {
+        const sel = r.querySelector("select");
+        const opt = sel.options[sel.selectedIndex];
+        const qty = Number(r.querySelector("input").value) || 0;
+        if (opt && qty > 0) {
+          items.push({
+            sku: sel.value,
+            title: opt.dataset.title,
+            size: opt.dataset.size,
+            qty: qty
+          });
+        }
+      });
+    
+      if (items.length === 0) return alert("請至少保留一項商品");
+    
+      const totalQty = items.reduce((sum, it) => sum + it.qty, 0);
+      const pricing = calculateTierPricing(totalQty);
+      const summary = items.map(it => `${it.title} (${it.size}) × ${it.qty}`).join(", ");
+    
+      const btn = document.getElementById("btnSaveEditOrder");
+      btn.disabled = true;
+      btn.textContent = "儲存中...";
+    
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          body: JSON.stringify({
+            action: "updateOrder",
+            passcode: adminPasscode,
+            orderNo: editingOrderNo,
+            name,
+            phone,
+            social,
+            note,
+            items,
+            summary,
+            totalQty,
+            totalAmount: pricing.final
+          })
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.message);
+      
+        alert("訂單修改成功！");
+        closeEditOrderModal();
+        await loadAdminData();
+      } catch (err) {
+        alert("修改失敗：" + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "💾 儲存修改";
+      }
+    }
+
 
     function switchPage(page) {
       document.getElementById("page-preorder").classList.toggle("active", page === "preorder");
