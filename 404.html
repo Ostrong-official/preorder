@@ -1263,57 +1263,87 @@
         (o.social || "").toLowerCase().includes(kw) ||
         (o.orderNo || "").toLowerCase().includes(kw)
       );
-    
+        
       if (filtered.length === 0) return alert("目前沒有可匯出的訂單資料！");
+        
+      // 1. 取得所有「款式 - 尺寸」欄位清單（依照庫存表順序，若無則自動從訂單收集）
+      const invList = (adminCache.inventory && adminCache.inventory.length > 0) ? adminCache.inventory : productList;
+      const colKeys = [];
+      invList.forEach(item => {
+        const key = `${item.style}款 - ${item.size}`;
+        if (!colKeys.includes(key)) colKeys.push(key);
+      });
     
+      // 2. 先解析每筆訂單的品項，確保任何特殊品項也都有對應欄位
+      const parsedOrders = filtered.map(o => {
+        const qtyMap = {};
+        const parts = (o.summary || "").split(/\s*\/\s*|\s*,\s*/).map(s => s.trim()).filter(Boolean);
+        parts.forEach(part => {
+          const m = part.match(/^(.+?)\s*\((.+?)\)\s*[×xX*]\s*(\d+)$/);
+          if (m) {
+            // 統一把 "A款" 或 "B款 - ..." 正規化成 "A款 - 150"、"B款 - XS"
+            const rawStyle = m[1].trim();
+            const stylePrefix = rawStyle.startsWith("A") ? "A款" : (rawStyle.startsWith("B") ? "B款" : rawStyle);
+            const sizeName = m[2].trim();
+            const key = `${stylePrefix} - ${sizeName}`;
+            const qty = Number(m[3]) || 0;
+            qtyMap[key] = (qtyMap[key] || 0) + qty;
+            if (!colKeys.includes(key)) colKeys.push(key);
+          }
+        });
+        return { order: o, qtyMap };
+      });
+    
+      // 3. 建立表頭（一筆訂單一列，款式尺寸橫向展開）
       const headers = [
         "訂單編號", "訂購人姓名", "手機號碼", "IG帳號",
-        "衣服款式", "尺寸", "數量", "整筆總件數",
-        "整筆應付金額", "訂單狀態", "備註", "下單時間"
+        ...colKeys,
+        "總件數", "應付總金額", "訂單狀態", "備註", "下單時間"
       ];
       const rows = [headers];
     
-      filtered.forEach(o => {
-        // 支援 "/" 或 "," 分隔多項商品，拆解成一列一件方便 Excel 篩選分類
-        const parts = (o.summary || "").split(/\s*\/\s*|\s*,\s*/).map(s => s.trim()).filter(Boolean);
-        if (parts.length > 0) {
-          parts.forEach(part => {
-            const m = part.match(/^(.+?)\s*\((.+?)\)\s*[×xX*]\s*(\d+)$/);
-            const styleName = m ? m[1].trim() : part;
-            const sizeName = m ? m[2].trim() : "";
-            const itemQty = m ? m[3].trim() : o.totalQty;
-            rows.push([
-              o.orderNo, o.name, o.phone, o.social,
-              styleName, sizeName, itemQty, o.totalQty,
-              o.totalAmount, o.status, o.note || "", o.createdAt
-            ]);
-          });
-        } else {
-          rows.push([
-            o.orderNo, o.name, o.phone, o.social,
-            o.summary, "", o.totalQty, o.totalQty,
-            o.totalAmount, o.status, o.note || "", o.createdAt
-          ]);
-        }
+      // 4. 填入每筆訂單資料
+      parsedOrders.forEach(({ order: o, qtyMap }) => {
+        // 確保手機號碼開頭補 0 並加上 ="..." 防止 Excel 變成科學記號
+        let phoneStr = String(o.phone || "").trim();
+        if (/^9\d{8}$/.test(phoneStr)) phoneStr = "0" + phoneStr;
+        const excelPhone = phoneStr ? `="${phoneStr}"` : "";
+      
+        const itemCells = colKeys.map(key => qtyMap[key] || "");
+        rows.push([
+          o.orderNo,
+          o.name,
+          excelPhone,
+          o.social,
+          ...itemCells,
+          o.totalQty,
+          o.totalAmount,
+          o.status,
+          o.note || "",
+          o.createdAt
+        ]);
       });
     
-      // 加上 UTF-8 BOM (\uFEFF)，確保台灣繁體中文 Windows/Mac 用 Excel 直接雙擊開啟不會亂碼
       const csvContent = "\uFEFF" + rows.map(row =>
-        row.map(val => `"${String(val ?? "").replace(/"/g, '""')}"`).join(",")
+        row.map(val => {
+          const s = String(val ?? "");
+          // 保留手機號碼的 ="09..." 公式格式不被雙引號包壞
+          if (s.startsWith('="') && s.endsWith('"')) return s;
+          return `"${s.replace(/"/g, '""')}"`;
+        }).join(",")
       ).join("\r\n");
-    
+      
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
       link.href = url;
-      link.download = `O-STRONG_預購訂單分類明細_${today}.csv`;
+      link.download = `O-STRONG_預購訂單總表_${today}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     }
-
 
     function renderAdminOrders() {
       const kw = (document.getElementById("adminOrderFilter").value || "").trim().toLowerCase();
