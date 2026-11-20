@@ -726,7 +726,10 @@
       <div class="panel-box">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; border-bottom:2px solid var(--black); padding-bottom:12px; margin-bottom:14px;">
           <h2 style="font-weight:900;">📦 訂單領取核銷管理</h2>
-          <input type="text" id="adminOrderFilter" class="form-input" style="max-width:280px;" placeholder="搜尋姓名、手機、IG或訂單編號..." oninput="renderAdminOrders()" />
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <input type="text" id="adminOrderFilter" class="form-input" style="max-width:260px;" placeholder="搜尋姓名、手機、IG或訂單編號..." oninput="renderAdminOrders()" />
+          <button type="button" onclick="exportOrdersToExcel()" style="background:#16a34a; color:#fff; border:none; border-radius:6px; padding:9px 14px; font-size:0.88rem; font-weight:700; cursor:pointer; white-space:nowrap;">📥 匯出 Excel</button>
+        </div>
         </div>
         <div id="adminOrdersList"></div>
       </div>
@@ -1250,6 +1253,67 @@
         btn.textContent = "💾 儲存製作件數";
       }
     }
+
+    function exportOrdersToExcel() {
+      const kw = (document.getElementById("adminOrderFilter").value || "").trim().toLowerCase();
+      const filtered = adminCache.orders.filter(o =>
+        !kw ||
+        (o.name || "").toLowerCase().includes(kw) ||
+        (o.phone || "").includes(kw) ||
+        (o.social || "").toLowerCase().includes(kw) ||
+        (o.orderNo || "").toLowerCase().includes(kw)
+      );
+    
+      if (filtered.length === 0) return alert("目前沒有可匯出的訂單資料！");
+    
+      const headers = [
+        "訂單編號", "訂購人姓名", "手機號碼", "IG帳號",
+        "衣服款式", "尺寸", "數量", "整筆總件數",
+        "整筆應付金額", "訂單狀態", "備註", "下單時間"
+      ];
+      const rows = [headers];
+    
+      filtered.forEach(o => {
+        // 支援 "/" 或 "," 分隔多項商品，拆解成一列一件方便 Excel 篩選分類
+        const parts = (o.summary || "").split(/\s*\/\s*|\s*,\s*/).map(s => s.trim()).filter(Boolean);
+        if (parts.length > 0) {
+          parts.forEach(part => {
+            const m = part.match(/^(.+?)\s*\((.+?)\)\s*[×xX*]\s*(\d+)$/);
+            const styleName = m ? m[1].trim() : part;
+            const sizeName = m ? m[2].trim() : "";
+            const itemQty = m ? m[3].trim() : o.totalQty;
+            rows.push([
+              o.orderNo, o.name, o.phone, o.social,
+              styleName, sizeName, itemQty, o.totalQty,
+              o.totalAmount, o.status, o.note || "", o.createdAt
+            ]);
+          });
+        } else {
+          rows.push([
+            o.orderNo, o.name, o.phone, o.social,
+            o.summary, "", o.totalQty, o.totalQty,
+            o.totalAmount, o.status, o.note || "", o.createdAt
+          ]);
+        }
+      });
+    
+      // 加上 UTF-8 BOM (\uFEFF)，確保台灣繁體中文 Windows/Mac 用 Excel 直接雙擊開啟不會亂碼
+      const csvContent = "\uFEFF" + rows.map(row =>
+        row.map(val => `"${String(val ?? "").replace(/"/g, '""')}"`).join(",")
+      ).join("\r\n");
+    
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      link.href = url;
+      link.download = `O-STRONG_預購訂單分類明細_${today}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
 
     function renderAdminOrders() {
       const kw = (document.getElementById("adminOrderFilter").value || "").trim().toLowerCase();
