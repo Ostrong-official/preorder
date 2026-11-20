@@ -838,7 +838,7 @@
           <th>建議身高參考</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="sizeGuideBody">
         <tr><td><strong>130</strong></td><td>52</td><td>39</td><td>35</td><td>120 ~ 135 cm</td></tr>
         <tr><td><strong>150</strong></td><td>59</td><td>43</td><td>39</td><td>135 ~ 150 cm</td></tr>
         <tr><td><strong>XS</strong></td><td>62</td><td>46</td><td>41</td><td>150 ~ 158 cm</td></tr>
@@ -970,6 +970,14 @@
         if (json.promo) {
           Object.assign(PROMO_CONFIG, json.promo);
         }
+        if (json.sizeGuide && json.sizeGuide.length > 0) {
+        const sgBody = document.getElementById("sizeGuideBody");
+        if (sgBody) {
+          sgBody.innerHTML = json.sizeGuide.map(item =>
+            `<tr><td><strong>${item.size}</strong></td><td>${item.length}</td><td>${item.chest}</td><td>${item.shoulder}</td><td>${item.height}</td></tr>`
+          ).join("");
+        }
+      }
         renderPromoBanner();
         renderProducts();
       } catch (err) {
