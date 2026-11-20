@@ -795,6 +795,9 @@
           <label>備註（選填）</label>
           <input type="text" id="inputNote" class="form-input" placeholder="例如：MIKI 教室自取" />
         </div>
+        <button type="button" onclick="toggleDrawer(false)" style="width:100%; padding:13px; font-size:0.95rem; font-weight:800; margin-top:6px; background:#ffffff; color:#000000; border:2px solid #000000; border-radius:8px; cursor:pointer;">
+          ← 繼續選購其他款式
+        </button>
         <button type="submit" id="checkoutBtn" class="btn-add" style="width:100%; padding:14px; font-size:1rem; margin-top:6px;">
           確認送出預購單
         </button>
@@ -1036,11 +1039,11 @@
       } else {
         bag.push({ sku, style, title: info.title, size, qty });
       }
-
+      
       qtyInputByStyle[style] = 1;
       renderProducts();
       renderBag();
-      toggleDrawer(true);
+      //alert(`已將「${info.title} (${size}) × ${qty}」加入預購袋！\n\n可繼續選購其他款式，或點擊下方「預購袋」前往填寫資料。`);
     }
 
     function removeBagItem(sku) {
@@ -1321,7 +1324,7 @@
       container.innerHTML = "";
     
       // 解析原本的明細字串，例如 "A款 (150) × 1, B款 (M) × 2"
-      const parts = (order.summary || "").split(",").map(s => s.trim()).filter(Boolean);
+      const parts = (order.summary || "").split(/\s*\/\s*|\s*,\s*/).map(s => s.trim()).filter(Boolean);
       if (parts.length > 0) {
         parts.forEach(part => {
           const m = part.match(/^(.+?)\s*\((.+?)\)\s*[×xX*]\s*(\d+)$/);
