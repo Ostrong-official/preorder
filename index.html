@@ -901,8 +901,8 @@
     const API_URL = "https://script.google.com/macros/s/AKfycbwCPkkYrTd2FBNh0SMvn7HEcq_DcgsayyO1lvFjmXmKV6UexbexskppXCpovvglSQ3vAA/exec";
 
     let productList = [];
-    let selectedSizeByStyle = { A: "130", B: "130" };
-    let qtyInputByStyle = { A: 1, B: 1 };
+    let selectedSizeByStyle = {};
+    let qtyInputByStyle = {};
     let bag = []; // [{ sku, style, title, size, qty }]
 
     // 管理後台狀態
@@ -1343,7 +1343,7 @@
           if (m) {
             // 統一把 "A款" 或 "B款 - ..." 正規化成 "A款 - 150"、"B款 - XS"
             const rawStyle = m[1].trim();
-            const stylePrefix = rawStyle.startsWith("A") ? "A款" : (rawStyle.startsWith("B") ? "B款" : rawStyle);
+            const stylePrefix = rawStyle.includes("款") ? rawStyle.split(/[\s-]/)[0] : `${rawStyle.split(/[\s-]/)[0]}款`;
             const sizeName = m[2].trim();
             const key = `${stylePrefix} - ${sizeName}`;
             const qty = Number(m[3]) || 0;
