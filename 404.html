@@ -1020,7 +1020,7 @@
 
     function renderProducts() {
       const grid = document.getElementById("productGrid");
-      const styles = ["A", "B"];
+      const styles = [...new Set(productList.map(p => p.style))];
       grid.innerHTML = "";
 
       if (productList.length === 0) {
@@ -1035,6 +1035,7 @@
         if (!items.some(i => i.size === selectedSizeByStyle[st])) {
           selectedSizeByStyle[st] = items[0].size;
         }
+        if (!qtyInputByStyle[st]) qtyInputByStyle[st] = 1;
 
         const card = document.createElement("div");
         card.className = "product-card";
